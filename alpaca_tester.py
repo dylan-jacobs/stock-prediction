@@ -60,14 +60,11 @@ def placeBuyAlpacaOrder(ticker, amnt, price, orders, positions):
 def placeSellAlpacaOrder(ticker, amnt, price, limit_order):
     response = None
     
-    if len(positions) > 0: # we own at least one stock
-        if limit_order:
-            response = api.submit_order(symbol=ticker, qty=amnt, side='sell', type='limit', time_in_force='day', limit_price=price)    
-        else:
-            response = api.submit_order(symbol=ticker, qty=amnt, side='sell', type='market', time_in_force='day')                
+    if limit_order:
+        response = api.submit_order(symbol=ticker, qty=amnt, side='sell', type='limit', time_in_force='day', limit_price=price)    
     else:
-        print('We do not own this stock!')
-    
+        response = api.submit_order(symbol=ticker, qty=amnt, side='sell', type='market', time_in_force='day')                
+
     return response
 
 def getTime():
