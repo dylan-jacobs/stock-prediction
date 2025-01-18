@@ -24,19 +24,17 @@ import numpy as np
 import yfinance
 import time
 from datetime import datetime
-import math
-import re
 from pytz import timezone
-import sys
-import requests
-import asyncio
 from threading import Thread
 import stock_predictor
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
-BASE_URL = "https://paper-api.alpaca.markets"
-ALPACA_API_KEY = "PKAU1W5OWUM6942S3MM0"
-ALPACA_SECRET_KEY = "BPJgvm8F9SiWsrufM5NqtcdY3rlEHchaxOELM0Yy"
+BASE_URL = os.getenv('BASE_URL')
+ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
+ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
 TICKER = 'SPY'
 
 # Instantiate REST API Connection
