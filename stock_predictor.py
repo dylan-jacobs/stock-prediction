@@ -16,7 +16,6 @@ import rsi_calculator
 import math
 from scipy.stats import pearsonr
 import back_tester
-import seaborn as sns
 
 SHORT_TERM_HISTORY = 1
 DAYS_IN_FUTURE_TO_PREDICT = 1
@@ -351,28 +350,6 @@ def test_statistical_significance_of_features():
         correlation, p = pearsonr(X_var, y_var)
         print(i, '===> Correlation coefficient: ', correlation, 'p-value: ', p)
 
-def check_redundant_features(X, y):
-    # Calculate correlation matrix
-    corr_matrix = X.corr()
-
-    # Create heatmap
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', linewidths=0.5)
-    plt.title('Feature Correlation Heatmap')
-    plt.show()
-
-    # Create a correlation matrix with target variable
-    corr_with_target = X.corrwith(pd.Series(y))
-
-    # Sort features by correlation with target variable
-    corr_with_target = corr_with_target.sort_values(ascending=False)
-
-    # Plot the heatmap
-    plt.figure(figsize=(4, 8))
-    sns.heatmap(corr_with_target.to_frame(), cmap='GnBu', annot=True)
-    plt.title('Correlation with Target Variable')
-    plt.show()
-
 def load_data_train_and_predict(ticker=TICKER, graph=False):
     input_scaler, output_scaler, trainX, trainy, testX, testy = prepare_data(ticker) #feature_indices=[0, 1, 2, 10, 12, 13]
     print(f'Training samples: {str(len(trainy))}, testing samples: {str(len(testy))}')
@@ -395,62 +372,6 @@ def load_model_and_test(ticker=TICKER):
     predict(model, output_scaler, all_data, all_data_y)
     bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler)
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
-
-def test_all_feature_combinations(ticker=TICKER):
-
-    def all_sets(a):
-        sublists = []
-        # Loop through all possible lengths of sublists (0 to len(lst))
-        for r in range(2, 3):#len(a) + 1):
-            # Generate all combinations of length 'r' and add them to the sublists list
-            sublists.extend(combinations(a, r))
-        # Convert tuples from combinations into lists for consistency
-        return [list(sublist) for sublist in sublists]
-    def stack_zeros():
-        all_possible_feature_combos = all_sets([i for i in range(0, len(FEATURES))])
-        print(all_possible_feature_combos)
-        print(len(all_possible_feature_combos))
-        profits_matrix = np.empty(len(all_possible_feature_combos), dtype=object)
-        for i, item in enumerate(all_possible_feature_combos):
-            profits_matrix[i] = np.array(item)
-        
-        # Add a column of zeros
-        column_of_zeros = np.zeros(len(profits_matrix), dtype=object)
-        for i in range(len(profits_matrix)):
-            column_of_zeros[i] = 0
-
-        # Combine original array with column of zeros
-        result = np.empty((len(profits_matrix), 3), dtype=object)
-        for i in range(len(profits_matrix)):
-            result[i, 0] = profits_matrix[i]
-            result[i, 1] = 0  # Add zero as a "column"
-            result[i, 2] = [FEATURES[result[i, 0][j]] for j in range(len(result[i, 0]))]
-        return result
-    profits_matrix = stack_zeros()
-
-    for i in range(0, len(profits_matrix)):
-        input_scaler, output_scaler, trainX, trainy, testX, testy = prepare_data(ticker)
-        all_data = np.append(trainX, testX[:-1, :], 0)
-        all_data_y = np.append(trainy, testy[:-1], 0)
-        model = train_model(trainX, trainy, testX, testy, ticker, plot=False)
-        all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
-        all_data_y = np.reshape(all_data_y, (all_data_y.shape[0], all_data_y.shape[1]))
-        testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
-        testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
-        #predict(model, output_scaler, testX, testy)
-        bnh_returns, strategy_returns = back_tester.test_strategy(testX, model, input_scaler, output_scaler, closes_ind=0)
-        profits_matrix[i, 1] = strategy_returns.iloc[-1]
-        profits_matrix = profits_matrix[profits_matrix[:, 1].argsort()[::-1]]
-        # Write the profits_matrix to a CSV file
-        np.savetxt('profits_matrix.csv', profits_matrix, delimiter=',', fmt='%s', header='Feature Combination,Strategy Returns,Feature Names', comments='')
-
-        print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
-
-    # Sort the profits_matrix by the second column in descending order
-    profits_matrix = profits_matrix[profits_matrix[:, 1].argsort()[::-1]]
-    print(profits_matrix)
-
-    return profits_matrix
 
 #load_data_train_and_predict()
 #load_model_and_test()
