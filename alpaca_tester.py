@@ -23,7 +23,6 @@ import stock_predictor
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
 BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')

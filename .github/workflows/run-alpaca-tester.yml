@@ -1,0 +1,39 @@
+name: Run Python Script Hourly
+
+on:
+  schedule:
+    - cron: "0 * * * *" # Runs at the top of every hour (UTC)
+  workflow_dispatch: # Allows manual trigger for testing
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10" # Specify your Python version
+
+    - name: Cache Python Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip # Cache directory for pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run Python Script
+      env:
+        BASE_URL: "${{ secrets.BASE_URL }}"
+        ALPACA_API_KEY: "${{ secrets.ALPACA_API_KEY }}"
+        ALPACA_SECRET_KEY: "${{ secrets.ALPACA_SECRET_KEY }}"
+      run: python alpaca_tester.py
