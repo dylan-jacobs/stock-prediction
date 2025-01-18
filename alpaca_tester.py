@@ -127,24 +127,18 @@ def sellPosition(ticker, qty, price, limit_order):
         time.sleep(5)
     return response
 
-def main():
-    # get time
-    CURRENT_HOUR, CURRENT_MIN, _ = getTime()
-    
-    # is it trading hours?
-    if (((CURRENT_HOUR + (CURRENT_MIN / 60)) >= 9.5) & (CURRENT_HOUR < 16) & (datetime.today().weekday() != 5) & (datetime.today().weekday() != 6)) or True:
-        
-        # get account info
-        positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
-        own_stock = len(positions) > 0
+def main():    
+    # get account info
+    positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
+    own_stock = len(positions) > 0
 
-        prediction = stock_predictor.load_data_train_and_predict(TICKER)[0]  
-        current_close = getAlpacaQuote(TICKER).bp
-        print(f'Prediction: {prediction}, Current Close: {current_close}')
-        if (prediction > current_close) and not own_stock:
-            buyPosition(TICKER, 1, current_close)
-        elif (prediction <= current_close) and own_stock:
-            sellPosition(TICKER, 1, current_close, False)
+    prediction = stock_predictor.load_data_train_and_predict(TICKER)[0]  
+    current_close = getAlpacaQuote(TICKER).bp
+    print(f'Prediction: {prediction}, Current Close: {current_close}')
+    if (prediction > current_close) and not own_stock:
+        buyPosition(TICKER, 1, current_close)
+    elif (prediction <= current_close) and own_stock:
+        sellPosition(TICKER, 1, current_close, False)
 
 
 if __name__=='__main__':
