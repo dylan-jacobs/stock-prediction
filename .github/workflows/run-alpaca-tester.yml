@@ -13,12 +13,6 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v3
       
-    - name: Use Secret as Environment Variable
-      env:
-        BASE_URL: ${{ secrets.BASE_URL }}
-        ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
-        ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
-
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -38,4 +32,8 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run Python Script
+      env:
+        BASE_URL: ${{ secrets.BASE_URL }}
+        ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+        ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
       run: python alpaca_tester.py
