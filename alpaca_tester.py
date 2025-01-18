@@ -127,9 +127,7 @@ def sellPosition(ticker, qty, price, limit_order):
         time.sleep(5)
     return response
 
-# now go!
-while(True):
-    
+def main():
     # get time
     CURRENT_HOUR, CURRENT_MIN, _ = getTime()
     
@@ -147,10 +145,10 @@ while(True):
             buyPosition(TICKER, 1, current_close)
         elif (prediction <= current_close) and own_stock:
             sellPosition(TICKER, 1, current_close, False)
-        
-        time.sleep(300)
 
 
+if __name__=='__main__':
+    main()
 
 
 
