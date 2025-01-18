@@ -25,14 +25,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
-BASE_URL = os.getenv('BASE_URL')
+BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
 ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
 TICKER = 'SPY'
 
 # Instantiate REST API Connection
-api = tradeapi.REST(key_id=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, 
-                    base_url=BASE_URL, api_version='v2')
+api = tradeapi.REST(key_id=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, base_url=BASE_URL, api_version='v2')
 
 class NewThread(Thread):
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
@@ -133,7 +132,7 @@ while(True):
     CURRENT_HOUR, CURRENT_MIN, _ = getTime()
     
     # is it trading hours?
-    while(((CURRENT_HOUR + (CURRENT_MIN / 60)) >= 9.5) & (CURRENT_HOUR < 16) & (datetime.today().weekday() != 5) & (datetime.today().weekday() != 6)) or True:
+    if (((CURRENT_HOUR + (CURRENT_MIN / 60)) >= 9.5) & (CURRENT_HOUR < 16) & (datetime.today().weekday() != 5) & (datetime.today().weekday() != 6)) or True:
         
         # get account info
         positions, orders, CASH, EQUITY, PROFIT = setAccountVars()

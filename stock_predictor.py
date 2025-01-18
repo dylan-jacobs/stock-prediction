@@ -9,6 +9,7 @@ import numpy as np
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # prevent GPU on Render server
 import tensorflow as tf
 from tensorflow import keras
 from sklearn import preprocessing
@@ -16,6 +17,7 @@ import rsi_calculator
 import math
 from scipy.stats import pearsonr
 import back_tester
+from multiprocessing import Process
 
 SHORT_TERM_HISTORY = 1
 DAYS_IN_FUTURE_TO_PREDICT = 1
