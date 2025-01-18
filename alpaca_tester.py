@@ -23,6 +23,8 @@ import stock_predictor
 import os
 from dotenv import load_dotenv
 
+# load_dotenv() # only on local
+
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
 BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
@@ -31,6 +33,7 @@ TICKER = 'SPY'
 
 # Instantiate REST API Connection
 api = tradeapi.REST(key_id=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, base_url=BASE_URL, api_version='v2')
+print(api.get_account())
 
 class NewThread(Thread):
     def __init__(self, group=None, target=None, name=None, args=(), kwargs={}):
