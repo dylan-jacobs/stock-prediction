@@ -4,7 +4,6 @@ Created on Mon Jan 31 17:47:46 2022
 
 @author: dylan
 """
-from itertools import chain, combinations
 import yfinance
 import numpy as np
 import os
@@ -12,14 +11,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn import preprocessing
-import xgboost as xgb
 import rsi_calculator
 import math
 from scipy.stats import pearsonr
 import back_tester
-from sklearn.neural_network import MLPClassifier
 import seaborn as sns
 
 SHORT_TERM_HISTORY = 1
