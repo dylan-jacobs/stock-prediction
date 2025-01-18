@@ -15,13 +15,6 @@ Every five mins:
 """
 
 import alpaca_trade_api as tradeapi
-from bs4 import BeautifulSoup
-import csv
-import matplotlib.pyplot as plt
-import json
-import pandas as pd
-import numpy as np
-import yfinance
 import time
 from datetime import datetime
 from pytz import timezone
