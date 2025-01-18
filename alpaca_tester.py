@@ -24,12 +24,14 @@ import os
 from dotenv import load_dotenv
 
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
-BASE_URL = os.getenv('BASE_URL')
-ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
-ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
+BASE_URL = os.getenv("BASE_URL")
+ALPACA_API_KEY = os.getenv("ALPACA_API_KEY")
+ALPACA_SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
 TICKER = 'SPY'
 print('hello')
 print(BASE_URL)
+print(ALPACA_API_KEY)
+print(ALPACA_SECRET_KEY)
 # Instantiate REST API Connection
 api = tradeapi.REST(key_id=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, base_url=BASE_URL, api_version='v2')
 
