@@ -375,7 +375,11 @@ def load_model_and_test(ticker=TICKER):
     bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler)
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
 
-if __name__=='__main__':
+def main():
     #load_data_train_and_predict()
     #load_model_and_test()
     #test_all_feature_combinations()
+    pass
+
+if __name__=='__main__':
+    main()
