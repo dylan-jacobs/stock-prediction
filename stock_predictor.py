@@ -356,10 +356,16 @@ def load_data_train_and_predict(ticker=TICKER, graph=False):
     input_scaler, output_scaler, trainX, trainy, testX, testy = prepare_data(ticker) #feature_indices=[0, 1, 2, 10, 12, 13]
     print(f'Training samples: {str(len(trainy))}, testing samples: {str(len(testy))}')
     model = train_model(trainX, trainy, testX, testy, graph)
-    testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
-    testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
-    predictions, _ = predict(model, output_scaler, testX, testy, graph)
-    bnh_returns, strategy_returns = back_tester.test_strategy(testX, model, input_scaler, output_scaler, closes_ind=0, graph=graph)
+    #testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
+    #testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
+
+    all_data = np.append(trainX, testX[:-1, :], 0)
+    all_data_y = np.append(trainy, testy[:-1], 0)
+    all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
+    all_data_y = np.reshape(all_data_y, (all_data_y.shape[0], all_data_y.shape[1]))
+
+    predictions, _ = predict(model, output_scaler, all_data, all_data_y)
+    bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler, closes_ind=0, graph=graph)
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
     return predictions[-DAYS_IN_FUTURE_TO_PREDICT] # return the prediction for the nth future day
 
@@ -371,7 +377,7 @@ def load_model_and_test(ticker=TICKER):
     all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
     all_data_y = np.reshape(all_data_y, (all_data_y.shape[0], all_data_y.shape[1]))
 
-    predict(model, output_scaler, all_data, all_data_y)
+    predictions, _ = predict(model, output_scaler, all_data, all_data_y, True)
     bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler)
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
 
