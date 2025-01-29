@@ -130,7 +130,7 @@ def main():
     own_stock = len(positions) > 0
 
     current_close = getAlpacaQuote(TICKER).ap
-    prediction = stock_predictor.load_data_train_and_predict(TICKER)[0]  
+    prediction = stock_predictor.load_data_train_and_predict(TICKER)
     print(f'Prediction: {prediction}, Current Close: {current_close}')
     if (prediction > current_close) and not own_stock:
         buyPosition(TICKER, 1, current_close)

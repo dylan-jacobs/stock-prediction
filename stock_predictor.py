@@ -17,7 +17,6 @@ import rsi_calculator
 import math
 from scipy.stats import pearsonr
 import back_tester
-from multiprocessing import Process
 
 SHORT_TERM_HISTORY = 1
 DAYS_IN_FUTURE_TO_PREDICT = 1
@@ -183,24 +182,27 @@ def get_technical_indicators(ticker=TICKER):
     data["leading_span_b"] = ((data[close_col].rolling(52).max() + data[close_col].rolling(52).min()) / 2).shift(26)
     data["lagging_span"] = data[close_col].shift(-26)
 
-    # get Williams %R
+    # get and add Williams %R
     wr = get_wr(highs, lows, data.iloc[:, 0], 14)
-    
-    # add Williams %R
     data['wr'] = wr
     
     # add rsi
     rsi = rsi_calculator.calculateRSI(TICKER, HISTORY, INTERVAL)
     data['rsi'] = rsi[SHORT_TERM_HISTORY+1:]
+
+    data = data.apply(pd.to_numeric, errors='coerce')
+    data = data.dropna()
+
+    # this will get dropped next because the last
+    # training example has a y value of None -> preserve it for prediction
+    most_recent_X_row = data.iloc[-1, :]
     
     # add y values
     data['y'] = y
 
-    print(data.tail())
-
     data = data.apply(pd.to_numeric, errors='coerce')
     data = data.dropna()
-    return data
+    return data, most_recent_X_row
 
 def get_old_technical_data():
     # get close data
@@ -278,10 +280,7 @@ def get_old_technical_data():
     return X
 
 def prepare_data(ticker=TICKER):
-    X = get_technical_indicators(ticker)
-
-    feature_names = X.columns
-    print(feature_names)
+    X, latest_X_row = get_technical_indicators(ticker)
     
     print(X.head())
     print(X.tail())
@@ -297,6 +296,7 @@ def prepare_data(ticker=TICKER):
 
     input_scaler, trainX = scale_data(trainX)
     testX = input_scaler.transform(testX)
+    latest_X_row = input_scaler.transform(latest_X_row)
     output_scaler, trainy = scale_data(trainy.reshape(-1, 1))
     testy = output_scaler.transform(testy.reshape(-1, 1))
 
@@ -309,10 +309,10 @@ def prepare_data(ticker=TICKER):
     testy = np.reshape(testy, (testy.shape[0], testy.shape[1], 1))
 
     print(f'trainX: {trainX.shape}, testX: {testX.shape}, trainy: {trainy.shape}, testy: {testy.shape}')
-    return input_scaler, output_scaler, trainX, trainy, testX, testy
+    return input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row
 
 def load_the_model(ticker=TICKER):
-    _, output_scaler, trainX, _, _, _ = prepare_data()
+    _, output_scaler, trainX, _, _, _, _ = prepare_data()
     model = create_model(trainX)
     model.load_weights('./training/cp-0005.weights.h5')
     return model, output_scaler
@@ -330,6 +330,8 @@ def graph_prediction(y, predictions):
      
 def predict(model, output_scaler, testX, testy, graph=False):
     pred = model.predict(testX)
+    latest_future_prediction = pred[-1]
+    pred = pred[:-1]
     # unscale
     pred = output_scaler.inverse_transform(pred.reshape(-1, 1))
     testy = output_scaler.inverse_transform(testy.reshape(-1, 1))
@@ -339,12 +341,12 @@ def predict(model, output_scaler, testX, testy, graph=False):
     
     se = np.sqrt(np.mean(((pred - testy)**2)))
     
-    print(f'Prediction {DAYS_IN_FUTURE_TO_PREDICT} days from now: {str(pred[-1])}')
+    print(f'Prediction {DAYS_IN_FUTURE_TO_PREDICT} days from now: {str(latest_future_prediction)}')
     print(f'Error: {se}')
-    return pred, se
+    return latest_future_prediction, se
     
 def test_statistical_significance_of_features():
-    _, _, trainX, trainy, _, _ = prepare_data()
+    _, _, trainX, trainy, _, _, _ = prepare_data()
     
     for i in range(0, trainX.shape[1]):
         X_var = trainX['dow-jones']
@@ -353,25 +355,22 @@ def test_statistical_significance_of_features():
         print(i, '===> Correlation coefficient: ', correlation, 'p-value: ', p)
 
 def load_data_train_and_predict(ticker=TICKER, graph=False):
-    input_scaler, output_scaler, trainX, trainy, testX, testy = prepare_data(ticker) #feature_indices=[0, 1, 2, 10, 12, 13]
+    input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row = prepare_data(ticker)
     print(f'Training samples: {str(len(trainy))}, testing samples: {str(len(testy))}')
     model = train_model(trainX, trainy, testX, testy, graph)
-    #testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
-    #testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
+    testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
+    testX = np.append(testX, latest_X_row, 0)
+    testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
 
-    all_data = np.append(trainX, testX[:-1, :], 0)
-    all_data_y = np.append(trainy, testy[:-1], 0)
-    all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
-    all_data_y = np.reshape(all_data_y, (all_data_y.shape[0], all_data_y.shape[1]))
+    predictions, _ = predict(model, output_scaler, testX, testy)
 
-    predictions, _ = predict(model, output_scaler, all_data, all_data_y)
-    bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler, closes_ind=0, graph=graph)
+    bnh_returns, strategy_returns = back_tester.test_strategy(testX, model, input_scaler, output_scaler, closes_ind=0, graph=graph)
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
-    return predictions[-DAYS_IN_FUTURE_TO_PREDICT] # return the prediction for the nth future day
+    return predictions[-1] # return the prediction for the next future time interval
 
 def load_model_and_test(ticker=TICKER):
     model, output_scaler = load_the_model(ticker)
-    input_scaler, output_scaler, trainX, trainy, testX, testy = prepare_data(ticker)
+    input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row = prepare_data(ticker)
     all_data = np.append(trainX, testX[:-1, :], 0)
     all_data_y = np.append(trainy, testy[:-1], 0)
     all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
