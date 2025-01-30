@@ -332,6 +332,7 @@ def predict(model, output_scaler, testX, testy, graph=False):
     latest_future_prediction = pred[-1]
     pred = pred[:-1]
     # unscale
+    latest_future_prediction = output_scaler.inverse_transform(latest_future_prediction.reshape(-1, 1))
     pred = output_scaler.inverse_transform(pred.reshape(-1, 1))
     testy = output_scaler.inverse_transform(testy.reshape(-1, 1))
     print(f'prediction tail: {pred[-5:, :]}, test tail: {testy[-5:, :]}')
