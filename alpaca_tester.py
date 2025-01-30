@@ -4,14 +4,10 @@ Created on Thu Dec 8 2022
 
 @author: dylan
 
-Strategy: semi hft?
-Every five mins:
-    iterate throught list of tickers (all from s&p500 index)
-    find one that is at low bollinger index
-    buy
-    keep track of bought stocks and profits
-        when owned stocks are at too high bollinger -> sell, or when price has risen by $1
-        sell when lost > 5% of initial dinero
+Strategy: 
+    - Every hour, make prediction using LSTM model in stock_predictor.py
+    - If prediction close > current close & don't own stock: ---> Buy
+    - Else: ---> Sell
 """
 
 import alpaca_trade_api as tradeapi

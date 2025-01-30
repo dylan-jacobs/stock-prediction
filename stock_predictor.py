@@ -180,7 +180,7 @@ def get_technical_indicators(ticker=TICKER):
     data["base_line"] = (data[close_col].rolling(26).max() + data[close_col].rolling(26).min()) / 2
     data["leading_span_a"] = ((data["conversion_line"] + data["base_line"]) / 2).shift(26)
     data["leading_span_b"] = ((data[close_col].rolling(52).max() + data[close_col].rolling(52).min()) / 2).shift(26)
-    data["lagging_span"] = data[close_col].shift(-26)
+    # data["lagging_span"] = data[close_col].shift(-26)
 
     # get and add Williams %R
     wr = get_wr(highs, lows, data.iloc[:, 0], 14)
@@ -189,9 +189,6 @@ def get_technical_indicators(ticker=TICKER):
     # add rsi
     rsi = rsi_calculator.calculateRSI(TICKER, HISTORY, INTERVAL)
     data['rsi'] = rsi[SHORT_TERM_HISTORY+1:]
-
-    data = data.apply(pd.to_numeric, errors='coerce')
-    data = data.dropna()
 
     # this will get dropped next because the last
     # training example has a y value of None -> preserve it for prediction
@@ -286,6 +283,8 @@ def prepare_data(ticker=TICKER):
     print(X.tail())
     
     X = np.array(X)
+    latest_X_row = np.array(latest_X_row)
+    print(latest_X_row)
     
     # split into train, test
     train, test = get_train_and_test_data(X)
@@ -296,7 +295,7 @@ def prepare_data(ticker=TICKER):
 
     input_scaler, trainX = scale_data(trainX)
     testX = input_scaler.transform(testX)
-    latest_X_row = input_scaler.transform(latest_X_row)
+    latest_X_row = input_scaler.transform(latest_X_row.reshape((1, len(latest_X_row))))
     output_scaler, trainy = scale_data(trainy.reshape(-1, 1))
     testy = output_scaler.transform(testy.reshape(-1, 1))
 
@@ -359,7 +358,7 @@ def load_data_train_and_predict(ticker=TICKER, graph=False):
     print(f'Training samples: {str(len(trainy))}, testing samples: {str(len(testy))}')
     model = train_model(trainX, trainy, testX, testy, graph)
     testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
-    testX = np.append(testX, latest_X_row, 0)
+    testX = np.append(testX, latest_X_row, 0) # add in most recent data
     testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
 
     predictions, _ = predict(model, output_scaler, testX, testy)
@@ -381,7 +380,7 @@ def load_model_and_test(ticker=TICKER):
     print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
 
 def main():
-    #load_data_train_and_predict()
+    load_data_train_and_predict()
     #load_model_and_test()
     #test_all_feature_combinations()
     pass
