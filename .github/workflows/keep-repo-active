@@ -3,7 +3,7 @@ name: Keep Repository Active
 on:
   schedule:
 #    - cron: '0 0 */50 * *'  # Runs every 50 days at midnight UTC
-     - cron: '35 11 * * *'
+     - cron: '35 15 * * *'
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
