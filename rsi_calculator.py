@@ -11,11 +11,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-def calculateRSI(ticker, period, interval):
-    data = yfinance.download(ticker, period=period, interval=interval)
-    data = data[['Close']]
-    close_data = [float(i) for i in data.values]
-    window_len = 14
+def calculateRSI(close_data, window_len=14):
+    close_data = [float(i) for i in close_data.values]
     gains = []
     losses = []
     window = []
@@ -78,7 +75,9 @@ def test():
     ticker = 'SPY'
     period = '10y'
     interval = '1d'
-    data = calculateRSI(ticker, period, interval)
+    data = yfinance.download(ticker, period=period, interval=interval)
+    close_data = data[['Close']]
+    data = calculateRSI(close_data, window_len=14)
     data = pd.DataFrame(np.column_stack([data[1:, 1], data[1:, -1]]), columns=['Close', 'rsi'])
     data = data.apply(pd.to_numeric, errors='coerce')
     data['bnh_returns'] = np.log(data['Close']/data['Close'].shift(1)) # log returns to enable 'continuous' compounding

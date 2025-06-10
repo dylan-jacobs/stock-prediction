@@ -19,6 +19,7 @@ from scipy.stats import pearsonr
 import back_tester
 
 SHORT_TERM_HISTORY = 1
+RSI_LOOKBACK = 14
 DAYS_IN_FUTURE_TO_PREDICT = 1
 HISTORY = '2y'
 INTERVAL = '1h' # 1h: max 2y
@@ -183,12 +184,12 @@ def get_technical_indicators(ticker=TICKER):
     # data["lagging_span"] = data[close_col].shift(-26)
 
     # get and add Williams %R
-    wr = get_wr(highs, lows, data.iloc[:, 0], 14)
+    wr = get_wr(highs, lows, data.iloc[:, 0], RSI_LOOKBACK)
     data['wr'] = wr
     
     # add rsi
-    rsi = rsi_calculator.calculateRSI(TICKER, HISTORY, INTERVAL)
-    data['rsi'] = rsi[SHORT_TERM_HISTORY+1:]
+    rsi = rsi_calculator.calculateRSI(data.iloc[:, 0], window_len=RSI_LOOKBACK)
+    data['rsi'] = rsi[1:] # account for the header string in the first entry by indexing starting at 1
 
     # this will get dropped next because the last
     # training example has a y value of None -> preserve it for prediction
