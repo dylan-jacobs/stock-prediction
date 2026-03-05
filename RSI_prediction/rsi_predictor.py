@@ -123,7 +123,7 @@ def backtest_strategy(df, predictions):
         return_heatmap=True,
         return_optimization=False
     )
-    plot_heatmaps(heatmap, agg='mean')
+    #plot_heatmaps(heatmap, agg='mean')
     #train_bt.plot()
 
     # get optimal parameters
