@@ -17,16 +17,15 @@ import rsi_calculator
 import math
 from scipy.stats import pearsonr
 import back_tester
+from backtesting import Backtest, Strategy
+from backtesting.lib import plot_heatmaps
 
-SHORT_TERM_HISTORY = 1
-DAYS_IN_FUTURE_TO_PREDICT = 1
+# amount of past data the model can see; 1h is almost nothing for price prediction
+SHORT_TERM_HISTORY = 12    # use the previous 12 intervals (e.g. hours) instead of just one
+HOURS_IN_FUTURE_TO_PREDICT = 1
 HISTORY = '2y'
 INTERVAL = '1h' # 1h: max 2y
-TICKER = 'SPY'
-FEATURES = [f'close-{i}' for i in range(SHORT_TERM_HISTORY, 0, -1)] + ['wr', 'volume', '5d-rolling-sma', '20d-rolling-avg',
-       'bollinger_up_20', 'bollinger_down_20', 'bollinger_up_10',
-       'bollinger_down_10', 'bollinger_up_5', 'bollinger_down_5', 'rsi',
-       'highs', 'lows']
+TICKER = 'CMCSA'
 
 def load_close_data(ticker, period):
     data = yfinance.download(ticker, period=period, interval=INTERVAL)
@@ -36,42 +35,35 @@ def load_close_data(ticker, period):
     low_data = data[['Low']]
     volume = data[['Volume']]
     return close_data, date_data, high_data, low_data, volume
-   
-def get_train_and_test_data(d):
-    train_len = math.ceil(d.shape[0] * 0.9)
-    return d[:train_len, :], d[train_len-SHORT_TERM_HISTORY:, :]
-
-def split_closes_into_X_and_y(closes):
-    X = []
-    y = []
-    for i in range(SHORT_TERM_HISTORY, len(closes)):
-        X.append(closes.iloc[i-(SHORT_TERM_HISTORY):i+1].values[-SHORT_TERM_HISTORY:])
-        try:
-            y.append(float(closes.iloc[i+DAYS_IN_FUTURE_TO_PREDICT].values[-1]))
-            #y.append(float((closes.iloc[i+DAYS_IN_FUTURE_TO_PREDICT].values[0] - closes.iloc[i].values[0])/closes.iloc[i].values[0]))
-        except:
-            y.append(None) # this None value will get removed later via X.dropna()
-    X, y = np.asarray(X).reshape((len(closes)-SHORT_TERM_HISTORY), SHORT_TERM_HISTORY), np.asarray(y)
-    return X, y
     
-def scale_data(d):
-    scaler = preprocessing.MinMaxScaler(feature_range=(0, 1))
-    return scaler, scaler.fit_transform(d)
-
 def create_model(trainX):
-    model = tf.keras.Sequential([
-        keras.layers.Input(shape=(trainX.shape[1], 1)),
-        keras.layers.LSTM(200, return_sequences=(False)),
-        #keras.layers.LSTM(64, return_sequences=(False)),
-        keras.layers.Dense(50),
-        #keras.layers.Dense(32),
-        keras.layers.Dense(1, activation='linear')
-    ])  
-    model.compile(optimizer='adam', loss='mean_squared_error') 
-    print(model.summary)
+    # simple 1‑layer LSTM with dropout and a small dense head; you can
+    # stack more layers or try bidirectional variants later
+
+    timesteps = trainX.shape[1]
+    n_features = trainX.shape[2]
+
+    model = keras.Sequential([
+        keras.layers.Input(shape=(timesteps, n_features)),
+        keras.layers.LSTM(128, return_sequences=True),
+        keras.layers.Dropout(0.2),
+        keras.layers.LSTM(64, return_sequences=False),   # return_sequences=True for attention
+        keras.layers.Dropout(0.2),
+        keras.layers.Dense(32, activation='relu'),
+        keras.layers.Dense(1, activation='linear') # sigmoid for binary classification, linear for regression
+    ])
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    """model.compile(
+        optimizer=keras.optimizers.Adam(
+        learning_rate=0.00001,   # drop from 0.001 to 0.00001
+        clipnorm=1.0             # clip gradients to prevent explosion
+        ),
+        loss='binary_crossentropy', 
+        metrics=['accuracy']) # for classification"""
+    print(model.summary())
     return model
 
-def train_model(trainX, trainy, testX, testy, batch_size=128, epochs=3, plot=False):
+def train_model(trainX, trainy, testX, testy, batch_size=128, epochs=4, plot=False):
     model = create_model(trainX)
     os.makedirs("results", exist_ok=True)
     os.makedirs("logs", exist_ok=True)
@@ -80,16 +72,20 @@ def train_model(trainX, trainy, testX, testy, batch_size=128, epochs=3, plot=Fal
     checkpoint_path = "training/cp-{epoch:04d}.weights.h5"
     checkpointer = tf.keras.callbacks.ModelCheckpoint(
         filepath=checkpoint_path,
-        save_weights_only=True, 
-        save_best_only=True, 
+        save_weights_only=True,
+        save_best_only=True,
         verbose=1,
     )
+    earlystop = tf.keras.callbacks.EarlyStopping(
+        monitor='val_loss', patience=5, restore_best_weights=True,
+        verbose=1
+    )
     history = model.fit(
-        trainX, trainy, 
-        batch_size=batch_size, 
-        epochs=epochs, 
-        validation_data=(testX, testy), 
-        callbacks=[checkpointer],
+        trainX, trainy,
+        batch_size=batch_size,
+        epochs=epochs,
+        validation_data=(testX, testy),
+        callbacks=[checkpointer, earlystop],
         verbose=1
     )
     train_mse = model.evaluate(trainX, trainy, verbose=0)
@@ -130,6 +126,64 @@ def get_wr(high, low, close, lookback):
     lowl = lowl[:len(close)]
     wr = -100 * (np.subtract(highh, close) / np.subtract(highh, lowl))
     return wr
+
+def calculate_rsi(closes, window_len):
+    window_len = 14
+    gains = []
+    losses = []
+    window = []
+    prev_avg_gain = None
+    prev_avg_loss = None
+    close_data = [float(i) for i in closes.values]
+    rsi_vals = []
+    for i, close in enumerate(close_data):
+        gain = 0
+        loss = 0
+        if i == 0:
+            window.append(close)
+            rsi_vals.append(None) # this will get removed later - it's just so that initial dimensions will match
+            continue
+        
+        dif = close_data[i] - close_data[i-1]
+        
+        if dif > 0:
+            gain = dif
+            loss = 0
+            
+        elif dif < 0:
+            gain = 0
+            loss = abs(dif)
+        
+        gains.append(gain)
+        losses.append(loss)
+        
+        if i < window_len:
+            window.append(close)
+            rsi_vals.append(None)
+            continue
+        
+        if i == window_len:
+            avg_gain = sum(gains) / len(gains)
+            avg_loss = sum(losses) / len(gains)
+        
+        else:
+            avg_gain = (prev_avg_gain * (window_len - 1) + gain) / window_len
+            avg_loss = (prev_avg_loss * (window_len - 1) + loss) / window_len
+        
+        prev_avg_gain = avg_gain
+        prev_avg_loss = avg_loss
+        
+        rs = avg_gain / avg_loss
+        rsi = (100 - (100 / (1 + rs)))
+        
+        window.append(close)
+        window.pop(0)
+        gains.pop(0)
+        losses.pop(0)
+        
+        rsi_vals.append(rsi)
+    output = np.asarray(rsi_vals)
+    return output
 
 def get_technical_indicators(ticker=TICKER):
     close_col = 'close'
@@ -190,6 +244,9 @@ def get_technical_indicators(ticker=TICKER):
     rsi = rsi_calculator.calculateRSI(TICKER, HISTORY, INTERVAL)
     data['rsi'] = rsi[SHORT_TERM_HISTORY+1:]
 
+    # add VWAP
+    # data['vwap'] = (((data[close_col] + highs.values[1:] + lows.values[1:]) / 3) * data['Volume']).cumsum() / data['Volume'].cumsum()
+
     # this will get dropped next because the last
     # training example has a y value of None -> preserve it for prediction
     most_recent_X_row = data.iloc[-1, :]
@@ -200,6 +257,96 @@ def get_technical_indicators(ticker=TICKER):
     data = data.apply(pd.to_numeric, errors='coerce')
     data = data.dropna()
     return data, most_recent_X_row
+
+def get_data(ticker=TICKER):
+    close_col = 'close'
+    # get close data
+    close_data, dates, highs, lows, volume = load_close_data(ticker, HISTORY)
+    data = pd.DataFrame(close_data.values, columns=[close_col])
+
+    data['Date'] = dates.values.ravel()
+    data['Volume'] = volume.values
+
+    data["SMA20"] = data[close_col].rolling(20).mean()
+    data["SMA50"] = data[close_col].rolling(50).mean()
+    
+    # Squeeze Pro: Bollinger Bands vs. Keltner Channels
+    data["stddev"] = data[close_col].rolling(20).std()
+    data["upper_bb"] = data["SMA20"] + 2 * data["stddev"]
+    data["lower_bb"] = data["SMA20"] - 2 * data["stddev"]
+    data["upper_kc"] = data["SMA20"] + 1.5 * data["stddev"]
+    data["lower_kc"] = data["SMA20"] - 1.5 * data["stddev"]
+    data["squeeze_pro"] = ((data["lower_bb"] > data["lower_kc"]) & (data["upper_bb"] < data["upper_kc"])).astype(int)
+
+    # Percentage Price Oscillator (PPO)
+    data["ema12"] = data[close_col].ewm(span=12, adjust=False).mean()
+    data["ema26"] = data[close_col].ewm(span=26, adjust=False).mean()
+    data["ppo"] = ((data["ema12"] - data["ema26"]) / data["ema26"]) * 100
+
+    # Thermo (relative position over a range)
+    data["thermo"] = (data[close_col] - data["SMA20"]) / (data["upper_bb"] - data["lower_bb"])
+
+    # Decay (exponential decay of price changes)
+    decay_factor = 0.9
+    data["decay"] = data[close_col].diff().ewm(alpha=1 - decay_factor, adjust=False).mean()
+
+    # Archer On-Balance Volume (OBV)
+    # data["volume_change"] = data["Volume"] * np.sign(data[close_col].diff())
+    #data["archer_obv"] = data["volume_change"].cumsum()
+
+    # Bollinger Bands
+    data["bb_mid"] = data["SMA20"]
+    data["bb_upper"] = data["upper_bb"]
+    data["bb_lower"] = data["lower_bb"]
+
+    # Squeeze Indicator
+    # data["squeeze"] = ((data["bb_upper"] - data["bb_lower"]) < (1.5 * data["stddev"])).astype(int)
+
+    # Ichimoku Indicator
+    data["conversion_line"] = (data[close_col].rolling(9).max() + data[close_col].rolling(9).min()) / 2
+    data["base_line"] = (data[close_col].rolling(26).max() + data[close_col].rolling(26).min()) / 2
+    data["leading_span_a"] = ((data["conversion_line"] + data["base_line"]) / 2).shift(26)
+    data["leading_span_b"] = ((data[close_col].rolling(52).max() + data[close_col].rolling(52).min()) / 2).shift(26)
+    # data["lagging_span"] = data[close_col].shift(-26)
+
+    # get and add Williams %R
+    wr = get_wr(highs, lows, data.iloc[:, 0], 14)
+    data['wr'] = wr
+    
+    # add rsi
+    rsi = calculate_rsi(close_data, 14)
+    data['rsi'] = rsi
+
+    # add VWAP
+    # data['vwap'] = (((data[close_col] + highs.values[1:] + lows.values[1:]) / 3) * data['Volume']).cumsum() / data['Volume'].cumsum()
+
+    data = data.apply(pd.to_numeric, errors='coerce')
+    data = data.dropna()
+
+    # extract dates
+    dates = data['Date']
+    data = data.drop(columns=['Date']) # remove dates
+    return data, dates
+
+def split_X_y(data):
+    X = []
+    y = []
+    test_closes = []
+
+    pct_changes = data['close'].pct_change().values
+    for i in range(len(data) - SHORT_TERM_HISTORY):
+        X.append(data.iloc[i:(i+SHORT_TERM_HISTORY)])
+
+        # Predict next close
+        y.append(float(data["close"].values[i+SHORT_TERM_HISTORY])) # predict next close
+
+        # Predict direction
+        #y.append((data["close"].values[i+SHORT_TERM_HISTORY] > data["close"].values[i+SHORT_TERM_HISTORY-1]).astype(int)) # up or down classification
+
+        # Predict return
+        #y.append(float(pct_changes[i+SHORT_TERM_HISTORY])) # predict next close
+        test_closes.append(float(data["close"].values[i+SHORT_TERM_HISTORY]))
+    return np.array(X), np.array(y), np.array(test_closes)
 
 def get_old_technical_data():
     # get close data
@@ -277,38 +424,53 @@ def get_old_technical_data():
     return X
 
 def prepare_data(ticker=TICKER):
-    X, latest_X_row = get_technical_indicators(ticker)
-    
-    print(X.head())
-    print(X.tail())
-    
-    X = np.array(X)
-    latest_X_row = np.array(latest_X_row)
-    print(latest_X_row)
-    
-    # split into train, test
-    train, test = get_train_and_test_data(X)
+    data, dates = get_data(ticker)
+    X, y, test_closes = split_X_y(data)
+    dates = dates[SHORT_TERM_HISTORY:]
+        
+    # split into train, test datasets
+    split = int(0.9 * len(X))
+    trainX = X[:split]
+    trainy = y[:split]
+    testX = X[split:] 
+    testy = y[split:] 
 
-    # resplit into X, y
-    trainX, trainy = train[:, :-1], train[:, -1]
-    testX, testy = test[:, :-1], test[:, -1]
+    latest_X_row = data.iloc[-SHORT_TERM_HISTORY:]
 
-    input_scaler, trainX = scale_data(trainX)
-    testX = input_scaler.transform(testX)
-    latest_X_row = input_scaler.transform(latest_X_row.reshape((1, len(latest_X_row))))
-    output_scaler, trainy = scale_data(trainy.reshape(-1, 1))
-    testy = output_scaler.transform(testy.reshape(-1, 1))
+    n_train = trainX.shape[0]
+    n_test = testX.shape[0]
+    timesteps = trainX.shape[1]
+    n_features = trainX.shape[2]
 
-    # reshape
-    #trainX = np.reshape(trainX, (trainX.shape[0], trainX.shape[1])) # USE THIS FOR THE XGBCLASSIFIER
-    #testX = np.reshape(testX, (testX.shape[0], testX.shape[1])) 
-    trainX = np.reshape(trainX, (trainX.shape[0], trainX.shape[1], 1)) # USE THIS FOR THE TENSORFLOW NN
-    testX = np.reshape(testX, (testX.shape[0], testX.shape[1], 1))
-    trainy = np.reshape(trainy, (trainy.shape[0], trainy.shape[1], 1))
-    testy = np.reshape(testy, (testy.shape[0], testy.shape[1], 1))
+    trainX_2d = trainX.reshape(-1, trainX.shape[2])
+    testX_2d = testX.reshape(-1, testX.shape[2])
+    latest_X_row_2d = latest_X_row.values
+
+    print("Per-feature max:")
+    for i, col in enumerate(data.columns):
+        print(f"  {col}: max={trainX_2d[:, i].max():.2f}, min={trainX_2d[:, i].min():.2f}")
+
+    # scale
+    #input_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1))
+    input_scaler = preprocessing.RobustScaler()
+    input_scaler.fit(trainX_2d)
+
+    trainX = input_scaler.transform(trainX_2d).reshape(n_train, timesteps, n_features)
+    trainX = np.clip(trainX, -3, 3)
+    testX = input_scaler.transform(testX_2d).reshape(n_test, timesteps, n_features)
+    testX = np.clip(testX, -3, 3)
+    latest_X_row = input_scaler.transform(latest_X_row_2d).reshape(1, timesteps, n_features)
+    
+    output_scaler = preprocessing.RobustScaler()
+    output_scaler.fit(trainy.reshape(-1, 1))
+    trainy = output_scaler.transform(trainy.reshape(-1, 1)).reshape(-1, 1)
+    testy = output_scaler.transform(testy.reshape(-1, 1)).reshape(-1, 1)
+
+    trainy = trainy.reshape(-1, 1)
+    testy = testy.reshape(-1, 1)
 
     print(f'trainX: {trainX.shape}, testX: {testX.shape}, trainy: {trainy.shape}, testy: {testy.shape}')
-    return input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row
+    return input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row, dates[split:], test_closes[split:]
 
 def load_the_model(ticker=TICKER):
     _, output_scaler, trainX, _, _, _, _ = prepare_data()
@@ -326,25 +488,7 @@ def graph_prediction(y, predictions):
     plt.plot(y[['Close', 'Predictions']])
     plt.legend(['Val', 'Predictions'], loc='lower right')
     plt.show()
-     
-def predict(model, output_scaler, testX, testy, graph=False):
-    pred = model.predict(testX)
-    latest_future_prediction = pred[-1]
-    pred = pred[:-1]
-    # unscale
-    latest_future_prediction = output_scaler.inverse_transform(latest_future_prediction.reshape(-1, 1))
-    pred = output_scaler.inverse_transform(pred.reshape(-1, 1))
-    testy = output_scaler.inverse_transform(testy.reshape(-1, 1))
-    print(f'prediction tail: {pred[-5:, :]}, test tail: {testy[-5:, :]}')
-    if graph:
-        graph_prediction(testy, pred)
-    
-    se = np.sqrt(np.mean(((pred - testy)**2)))
-    
-    print(f'Prediction {DAYS_IN_FUTURE_TO_PREDICT} days from now: {str(latest_future_prediction)}')
-    print(f'Error: {se}')
-    return latest_future_prediction, se
-    
+       
 def test_statistical_significance_of_features():
     _, _, trainX, trainy, _, _, _ = prepare_data()
     
@@ -354,36 +498,178 @@ def test_statistical_significance_of_features():
         correlation, p = pearsonr(X_var, y_var)
         print(i, '===> Correlation coefficient: ', correlation, 'p-value: ', p)
 
-def load_data_train_and_predict(ticker=TICKER, graph=False):
-    input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row = prepare_data(ticker)
+def backtest_strategy(df, predictions):
+
+    class PredictionStrategy(Strategy):
+        buy_threshold = 0.01
+        sell_threshold = 0.01
+
+        def init(self):
+            self.signals = self.I(lambda: predictions, name='LSTM Predictions')
+
+        def next(self):
+            prediction = self.signals[-1]
+            current = self.data.Close[-1]
+            
+            if prediction > current * (1 + self.buy_threshold):
+                if not self.position.is_long:
+                    self.buy()
+            elif prediction < current * (1 - self.sell_threshold):
+                if not self.position.is_short:
+                    self.sell()
+            else:
+                self.position.close()
+    
+    class DirectionStrategy(Strategy):
+
+        def init(self):
+            self.signals = self.I(lambda: predictions, name='LSTM Predictions')
+
+        def next(self):
+            prediction = self.signals[-1]
+            
+            if prediction > 0:
+                if not self.position.is_long:
+                    self.buy()
+            elif prediction <= 0:
+                if not self.position.is_short:
+                    self.sell()
+
+    class RSIStrategy(Strategy):
+
+        buy_threshold = 0.3
+        sell_threshold = 0.7
+        pred_data = None
+
+        def init(self):
+            self.rsi = self.I(lambda: self.pred_data, name='RSI Predictions')
+
+        def next(self):
+            rsi = self.rsi[-1]
+            
+            if rsi < self.buy_threshold*100:
+                if not self.position.is_long:
+                    self.buy()
+            elif rsi > self.sell_threshold*100:
+                if self.position.is_long:
+                    self.position.close()
+
+
+    split = int(0.8 * len(df))
+    train_df = df.iloc[:split]
+    test_df = df.iloc[split:]
+    RSIStrategy.pred_data = predictions[:split].flatten()
+    train_bt = Backtest(train_df, RSIStrategy, cash=10000, commission=0, finalize_trades=True)
+    buy_thresholds = [float(round(i, 2)) for i in np.arange(0.15, 0.9, 0.02)]
+    sell_thresholds = [float(round(i, 2)) for i in np.arange(0.15, 0.9, 0.02)]
+    stats, heatmap = train_bt.optimize(
+        buy_threshold=buy_thresholds,
+        sell_threshold=sell_thresholds, 
+        constraint=lambda buy_threshold, sell_threshold: buy_threshold < sell_threshold, # buy threshold must be less than sell threshold
+        maximize='Equity Final [$]',
+        max_tries=None,
+        random_state=42,
+        return_heatmap=True,
+        return_optimization=False
+    )
+    plot_heatmaps(heatmap, agg='mean')
+    optimal_buy_threshold = stats.at['_strategy'].buy_threshold
+    optimal_sell_threshold = stats.at['_strategy'].sell_threshold
+    print(f'Best buy threshold: {optimal_buy_threshold}, Best sell threshold: {optimal_sell_threshold}')
+    
+    RSIStrategy.buy_threshold = optimal_buy_threshold
+    RSIStrategy.sell_threshold = optimal_sell_threshold
+    RSIStrategy.pred_data = predictions[split:].flatten()
+    test_bt = Backtest(test_df, RSIStrategy, cash=10000, commission=0, finalize_trades=True)
+    stats = test_bt.run()
+    print(stats)
+    test_bt.plot()
+
+
+def load_data_train_and_predict(ticker=TICKER, graph=True):
+    input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row, test_dates, test_closes = prepare_data(ticker)
     print(f'Training samples: {str(len(trainy))}, testing samples: {str(len(testy))}')
+
+    # 3. Check feature scale
+    print("X mean:", trainX.mean())
+    print("X std: ", trainX.std())
+    print("X min: ", trainX.min())
+    print("X max: ", trainX.max())
+
     model = train_model(trainX, trainy, testX, testy, graph)
-    testX = np.reshape(testX, (testX.shape[0], testX.shape[1]))
-    testX = np.append(testX, latest_X_row, 0) # add in most recent data
-    testy = np.reshape(testy, (testy.shape[0], testy.shape[1]))
 
-    predictions, _ = predict(model, output_scaler, testX, testy)
+    test_predictions = model.predict(testX)
+    print(test_predictions.shape)
+    latest_future_prediction = model.predict(latest_X_row)
 
-    bnh_returns, strategy_returns = back_tester.test_strategy(testX, model, input_scaler, output_scaler, closes_ind=0, graph=graph)
-    print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
-    return predictions[-1] # return the prediction for the next future time interval
+    # unscale
+    latest_future_prediction = output_scaler.inverse_transform(latest_future_prediction.reshape(-1, 1))
+    test_predictions = output_scaler.inverse_transform(test_predictions.reshape(-1, 1))
+    testy = output_scaler.inverse_transform(testy.reshape(-1, 1))
+    print(f'prediction tail: {test_predictions[-5:, :]}, test tail: {testy[-5:, :]}')
+    if graph:
+        graph_prediction(testy, test_predictions)
+    
+    se = np.sqrt(np.mean(((test_predictions - testy)**2)))
+    
+    print(f'Prediction 1 hour from now: {str(latest_future_prediction)}')
+    print(f'Error: {se}')
 
-def load_model_and_test(ticker=TICKER):
-    model, output_scaler = load_the_model(ticker)
-    input_scaler, output_scaler, trainX, trainy, testX, testy, latest_X_row = prepare_data(ticker)
-    all_data = np.append(trainX, testX[:-1, :], 0)
-    all_data_y = np.append(trainy, testy[:-1], 0)
-    all_data = np.reshape(all_data, (all_data.shape[0], all_data.shape[1]))
-    all_data_y = np.reshape(all_data_y, (all_data_y.shape[0], all_data_y.shape[1]))
+    #bnh_returns, strategy_returns = back_tester.test_strategy(test_predictions, testy, graph=graph)
+    #print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
 
-    predictions, _ = predict(model, output_scaler, all_data, all_data_y, True)
-    bnh_returns, strategy_returns = back_tester.test_strategy(all_data, model, input_scaler, output_scaler)
-    print(f'Buy and hold returns: {bnh_returns.iloc[-1]}, Strategy returns: {strategy_returns.iloc[-1]}')
+    # backtest
+    df = pd.DataFrame({
+        'Open': test_closes.flatten(),
+        'High': test_closes.flatten(),
+        'Low': test_closes.flatten(),
+        'Close': test_closes.flatten(),
+        'Volume': np.ones_like(test_closes.flatten())
+    }, index=pd.DatetimeIndex(test_dates.values.flatten()))
+    backtest_strategy(df, test_predictions.flatten())
+
+    return latest_future_prediction[-1] # return the prediction for the next future time interval
+
+
+def test_rsi_strategy(ticker=TICKER, graph=True):
+    close_col = 'Close'
+    # get close data
+    close_data, dates, highs, lows, volume = load_close_data(ticker, HISTORY)
+    data = pd.DataFrame(close_data.values, columns=[close_col])
+
+    data['Date'] = dates.values.ravel()
+    data['Open'] = close_data.values
+    data['High'] = highs.values
+    data['Low'] = lows.values
+    data['Volume'] = volume.values
+    
+    # add rsi
+    rsi = calculate_rsi(close_data, 14)
+    data['rsi'] = rsi
+
+    data = data.apply(pd.to_numeric, errors='coerce')
+    data = data.dropna()
+        
+    # extract dates
+    dates = data['Date']
+    data = data.drop(columns=['Date']) # remove dates
+
+    close_data = data[close_col]
+
+    # backtest
+    df = pd.DataFrame({
+        'Open': close_data.values.flatten(),
+        'High': data["High"].values.flatten(),
+        'Low': data["Low"].values.flatten(),
+        'Close': close_data.values.flatten(),
+        'Volume': data["Volume"].values.flatten()
+    }, index=pd.DatetimeIndex(dates.values.flatten()))
+    backtest_strategy(df, data['rsi'].values.flatten())
+
 
 def main():
-    load_data_train_and_predict()
-    #load_model_and_test()
-    #test_all_feature_combinations()
+    #load_data_train_and_predict()
+    test_rsi_strategy()
     pass
 
 if __name__=='__main__':
