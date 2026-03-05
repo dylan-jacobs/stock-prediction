@@ -19,7 +19,7 @@ import stock_predictor
 import os
 from dotenv import load_dotenv
 
-# load_dotenv() # only on local
+load_dotenv() # only on local
 
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
 BASE_URL = "https://paper-api.alpaca.markets"

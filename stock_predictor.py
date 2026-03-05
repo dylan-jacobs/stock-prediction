@@ -237,7 +237,7 @@ def get_technical_indicators(ticker=TICKER):
     # data["lagging_span"] = data[close_col].shift(-26)
 
     # get and add Williams %R
-    wr = get_wr(highs, lows, data.iloc[:, 0], 14)
+    wr = get_wr(highs, lows, data.iloc[:, 0], RSI_LOOKBACK)
     data['wr'] = wr
     
     # add rsi
