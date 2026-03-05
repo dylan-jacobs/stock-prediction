@@ -19,7 +19,7 @@ import rsi_predictor
 import os
 from dotenv import load_dotenv
 
-#load_dotenv() # only on local
+load_dotenv() # only on local
 
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
 BASE_URL = "https://paper-api.alpaca.markets"
@@ -128,9 +128,9 @@ def main():
     current_close = getAlpacaQuote(TICKER).ap
     rsi, buy_threshold, sell_threshold = rsi_predictor.test_rsi_strategy(TICKER)
     print(f'RSI: {rsi}, Current Close: {current_close}, Buy Threshold: {buy_threshold}, Sell Threshold: {sell_threshold}')
-    if (rsi < buy_threshold) and not own_stock:
+    if (rsi < buy_threshold*100) and not own_stock:
         buyPosition(TICKER, 1, current_close)
-    elif (rsi >= sell_threshold) and own_stock:
+    elif (rsi >= sell_threshold*100) and own_stock:
         sellPosition(TICKER, 1, current_close, False)
 
 
