@@ -36,4 +36,4 @@ jobs:
         BASE_URL: "${{ secrets.BASE_URL }}"
         ALPACA_API_KEY: "${{ secrets.ALPACA_API_KEY }}"
         ALPACA_SECRET_KEY: "${{ secrets.ALPACA_SECRET_KEY }}"
-      run: python alpaca_rsi_trader.py
+      run: python RSI_prediction/alpaca_rsi_trader.py
