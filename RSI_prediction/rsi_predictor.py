@@ -14,8 +14,8 @@ from backtesting import Backtest, Strategy
 from backtesting.lib import plot_heatmaps
 
 HISTORY = '60d'
-INTERVAL = '15m' # 1h: max 2y
-TICKER = 'SPY'
+INTERVAL = '30m' # 1h: max 2y
+TICKER = 'DJD'
 
 
 class RSIStrategy(Strategy):
@@ -105,14 +105,14 @@ def calculate_rsi(closes, window_len):
     return output
 
 
-def backtest_strategy(df, predictions):
+def backtest_strategy(df, predictions, graph=False, verbose=False):
 
-    split = int(0.8 * len(df))
+    split = int(0.8 * len(df)) # for testing
     train_df = df.iloc[:split]
     test_df = df.iloc[split:]
     RSIStrategy.pred_data = predictions[:split].flatten()
     train_bt = Backtest(train_df, RSIStrategy, cash=10000, commission=0, finalize_trades=True)
-    buy_thresholds = [float(round(i, 2)) for i in np.arange(0.25, 0.35, 0.01)]
+    buy_thresholds = [float(round(i, 2)) for i in np.arange(0.2, 0.4, 0.01)]
     sell_thresholds = [float(round(i, 2)) for i in np.arange(0.55, 0.85, 0.01)]
     stats, heatmap = train_bt.optimize(
         buy_threshold=buy_thresholds,
@@ -124,25 +124,32 @@ def backtest_strategy(df, predictions):
         return_heatmap=True,
         return_optimization=False
     )
-    #plot_heatmaps(heatmap, agg='mean')
-    #train_bt.plot()
+    if graph:
+        plot_heatmaps(heatmap, agg='mean')
+        train_bt.plot()
 
     # get optimal parameters
     optimal_buy_threshold = stats.at['_strategy'].buy_threshold
     optimal_sell_threshold = stats.at['_strategy'].sell_threshold
-    print(f'Best buy threshold: {optimal_buy_threshold}, Best sell threshold: {optimal_sell_threshold}')
-    
+
+    if verbose:
+        print(f'Best buy threshold: {optimal_buy_threshold}, Best sell threshold: {optimal_sell_threshold}')
+
+    # test on test set
     RSIStrategy.buy_threshold = optimal_buy_threshold
     RSIStrategy.sell_threshold = optimal_sell_threshold
     RSIStrategy.pred_data = predictions[split:].flatten()
     test_bt = Backtest(test_df, RSIStrategy, cash=10000, commission=0, finalize_trades=True)
     stats = test_bt.run()
-    print(stats)
-    #test_bt.plot()
+    if graph:
+        test_bt.plot()
+    
+    if verbose:
+        print(stats)
 
-    return optimal_buy_threshold, optimal_sell_threshold
+    return optimal_buy_threshold, optimal_sell_threshold, stats['Return [%]'], stats['Buy & Hold Return [%]']
 
-def test_rsi_strategy(ticker=TICKER):
+def test_rsi_strategy(ticker=TICKER, graph=False, verbose=False):
     close_col = 'Close'
     # get close data
     open_data, close_data, dates, highs, lows, volume = load_close_data(ticker, HISTORY)
@@ -155,8 +162,9 @@ def test_rsi_strategy(ticker=TICKER):
     data['Volume'] = volume.values
     
     # add rsi
-    rsi = calculate_rsi(close_data, 14)
-    data['rsi'] = rsi
+    data['rsi_med'] = calculate_rsi(close_data, 14)
+    data['rsi_short'] = calculate_rsi(close_data, 6)
+    data['rsi_long'] = calculate_rsi(close_data, 24)
 
     data = data.apply(pd.to_numeric, errors='coerce')
     data = data.dropna()
@@ -164,6 +172,8 @@ def test_rsi_strategy(ticker=TICKER):
     # extract dates
     dates = data['Date']
     data = data.drop(columns=['Date']) # remove dates
+    data['rsi'] = (data['rsi_med'] + data['rsi_short'] + data['rsi_long']) / 3
+    rsi = data['rsi'].values.flatten()
 
     close_data = data[close_col]
 
@@ -175,15 +185,16 @@ def test_rsi_strategy(ticker=TICKER):
         'Close': data['Close'].values.flatten(),
         'Volume': data["Volume"].values.flatten()
     }, index=pd.DatetimeIndex(dates.values.flatten()))
-    optimal_buy_threshold, optimal_sell_threshold = backtest_strategy(df, data['rsi'].values.flatten())
+    optimal_buy_threshold, optimal_sell_threshold, pct_return, bnh_return = backtest_strategy(df, data['rsi'].values.flatten(), graph=graph, verbose=verbose)
 
-    return rsi[-1], optimal_buy_threshold, optimal_sell_threshold
+    return rsi[-1], optimal_buy_threshold, optimal_sell_threshold, pct_return, bnh_return
 
 
 def main():
     #backtesting.Pool = multiprocessing.Pool
 
-    test_rsi_strategy()
+    rsi, buy_threshold, sell_threshold, pct_return, bnh_return = test_rsi_strategy(TICKER, graph=True, verbose=True)
+    print(pct_return)
     pass
 
 if __name__=='__main__':
