@@ -19,13 +19,13 @@ import rsi_predictor
 import os
 from dotenv import load_dotenv
 
-#load_dotenv() # only on local
+load_dotenv() # only on local
 
 # ALPACA API Info for fetching data, portfolio, etc. from Alpaca
 BASE_URL = "https://paper-api.alpaca.markets"
 ALPACA_API_KEY = os.getenv('ALPACA_API_KEY')
 ALPACA_SECRET_KEY = os.getenv('ALPACA_SECRET_KEY')
-TICKER = 'SPY'
+TICKERS = ['SPY', 'DJD', 'VOO', 'SPYD', 'AAPL', 'JPM', 'V', 'MA', 'HD', 'PG', 'BAC', 'VZ']
 
 # Instantiate REST API Connection
 api = tradeapi.REST(key_id=ALPACA_API_KEY, secret_key=ALPACA_SECRET_KEY, base_url=BASE_URL, api_version='v2')
@@ -121,24 +121,36 @@ def sellPosition(ticker, qty, price, limit_order):
     return response
 
 def main():    
-    # get account info
-    positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
-    own_stock = len(positions) > 0
 
-    current_close = getAlpacaQuote(TICKER).ap
+    for TICKER in TICKERS:
 
-    rsi, buy_threshold, sell_threshold, pct_return, bnh_return = rsi_predictor.test_rsi_strategy(TICKER, graph=False, verbose=False)
-    rsi = round(rsi, 2)
+        print(f'--------- Processing {TICKER}... ---------')
 
-    print(f'{TICKER} - RSI: {rsi}, Current Price: {current_close}, Buy Threshold: {buy_threshold}, Sell Threshold: {sell_threshold}')
-    print(f'Backtest Return: {pct_return}%, Buy & Hold Return: {bnh_return}%')
+        # get account info
+        positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
+        own_stock = len(positions) > 0
 
-    if pct_return > bnh_return:
-         print('RSI strategy outperformed Buy & Hold in backtest. Will look to execute trades...')
-         if (rsi < buy_threshold*100) and not own_stock:
-             buyPosition(TICKER, 1, current_close)
-         elif (rsi >= sell_threshold*100) and own_stock:
-             sellPosition(TICKER, 1, current_close, False)
+        current_close = getAlpacaQuote(TICKER).ap
+
+        rsi, buy_threshold, sell_threshold, pct_return, bnh_return = rsi_predictor.test_rsi_strategy(TICKER, graph=False, verbose=False)
+        rsi = round(rsi, 2)
+
+        print(f'{TICKER} - RSI: {rsi}, Current Price: {current_close}, Buy Threshold: {buy_threshold}, Sell Threshold: {sell_threshold}')
+        print(f'Backtest Return: {pct_return}%, Buy & Hold Return: {bnh_return}%')
+            
+        if current_close is None or current_close == 0:
+            print('Error fetching current price. Will not execute trade.')
+            continue
+        if current_close > CASH:
+            print(f'Current price for {TICKER} is ${current_close}, which is above available cash of ${CASH}. Will not execute trade.')
+            continue
+
+        if pct_return > bnh_return:
+            print('RSI strategy outperformed Buy & Hold in backtest. Will look to execute trades...')
+            if (rsi < buy_threshold*100) and not own_stock:
+                buyPosition(TICKER, 1, current_close)
+            elif (rsi >= sell_threshold*100) and own_stock:
+                sellPosition(TICKER, 1, current_close, False)
 
 
 if __name__=='__main__':
