@@ -17,6 +17,26 @@ HISTORY = '60d'
 INTERVAL = '15m' # 1h: max 2y
 TICKER = 'SPY'
 
+
+class RSIStrategy(Strategy):
+
+        buy_threshold = 0.3
+        sell_threshold = 0.7
+        pred_data = None
+
+        def init(self):
+            self.rsi = self.I(lambda: self.pred_data, name='RSI Predictions')
+
+        def next(self):
+            rsi = self.rsi[-1]
+            
+            if rsi < self.buy_threshold*100:
+                if not self.position.is_long:
+                    self.buy()
+            elif rsi > self.sell_threshold*100:
+                if self.position.is_long:
+                    self.position.close()
+
 def load_close_data(ticker, period):
     data = yfinance.download(ticker, period=period, interval=INTERVAL)
     close_data = data[['Close']]
@@ -86,25 +106,6 @@ def calculate_rsi(closes, window_len):
 
 
 def backtest_strategy(df, predictions):
-
-    class RSIStrategy(Strategy):
-
-        buy_threshold = 0.3
-        sell_threshold = 0.7
-        pred_data = None
-
-        def init(self):
-            self.rsi = self.I(lambda: self.pred_data, name='RSI Predictions')
-
-        def next(self):
-            rsi = self.rsi[-1]
-            
-            if rsi < self.buy_threshold*100:
-                if not self.position.is_long:
-                    self.buy()
-            elif rsi > self.sell_threshold*100:
-                if self.position.is_long:
-                    self.position.close()
 
     split = int(0.8 * len(df))
     train_df = df.iloc[:split]
