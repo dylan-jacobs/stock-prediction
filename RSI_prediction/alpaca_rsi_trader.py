@@ -128,7 +128,8 @@ def main():
 
         # get account info
         positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
-        own_stock = len(positions) > 0
+        
+        own_stock = TICKER in positions
 
         current_close = getAlpacaQuote(TICKER).ap
 
