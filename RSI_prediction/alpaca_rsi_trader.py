@@ -83,21 +83,21 @@ def setAccountVars(ticker):
         return positions, open_orders, CASH, EQUITY, PROFIT
     except Exception:
         time.sleep(5)
-        return setAccountVars()
+        return setAccountVars(ticker)
 
 def buyPosition(ticker, qty, price):
-    positions, orders, CASH, _, _ = setAccountVars()
+    positions, orders, CASH, _, _ = setAccountVars(ticker)
             
     # buy now
     response = placeBuyAlpacaOrder(ticker, qty, price, orders, positions)
     
     # update info
     ORDER_ID = response.id
-    positions, orders, CASH, _, _ = setAccountVars()
+    positions, orders, CASH, _, _ = setAccountVars(ticker)
     times_to_delay = 0
     symbols = [p.symbol for p in positions]
     while (ticker not in symbols) and (times_to_delay <= 24):
-        positions, orders, CASH, _, _ = setAccountVars()
+        positions, orders, CASH, _, _ = setAccountVars(ticker)
         symbols = [p.symbol for p in positions]
         times_to_delay+=1
         print('Attempting to buy...')
@@ -108,7 +108,7 @@ def buyPosition(ticker, qty, price):
 def sellPosition(ticker, qty, price, limit_order):
     # sell now
     response = placeSellAlpacaOrder(ticker, qty, price, limit_order)
-    positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
+    positions, orders, CASH, EQUITY, PROFIT = setAccountVars(ticker)
     
     # update info
     symbols = [p.symbol for p in positions]
@@ -127,7 +127,7 @@ def main():
         print(f'--------- Processing {TICKER}... ---------')
 
         # get account info
-        positions, open_orders, CASH, EQUITY, PROFIT = setAccountVars()
+        positions, open_orders, CASH, EQUITY, PROFIT = setAccountVars(TICKER)
 
         own_stock = TICKER in positions
 
