@@ -2,7 +2,7 @@ name: Run RSI Prediction Script
 
 on:
   schedule:
-    - cron: '30,0 14-20 * * 1-5'  # Every 30 minutes between 9:30 AM and 4:00 PM EST (2:30 PM to 9:00 PM UTC)
+    - cron: '0,30 14-20 * * 1-5'  # Every 30 minutes between 9:30 AM and 4:00 PM EST (2:30 PM to 9:00 PM UTC)
   workflow_dispatch: # Allows manual trigger for testing
 
 jobs:
