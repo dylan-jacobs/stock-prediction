@@ -69,18 +69,18 @@ def getTime():
     CURRENT_SEC = int(datetime.now(timezone('US/Eastern')).strftime('%S'))
     return CURRENT_HOUR, CURRENT_MIN, CURRENT_SEC
 
-def setAccountVars():
+def setAccountVars(ticker):
     try:
         account = api.get_account()
         positions = api.list_positions()
-        orders = api.list_orders()
+        open_orders = api.list_orders(status='open', symbols=[ticker])
         CASH = float(account.cash)
         EQUITY = float(account.equity)
         PROFIT = 0
         if (len(positions) > 0):
             for pos in positions:
                 PROFIT += float(pos.unrealized_pl)
-        return positions, orders, CASH, EQUITY, PROFIT
+        return positions, open_orders, CASH, EQUITY, PROFIT
     except Exception:
         time.sleep(5)
         return setAccountVars()
@@ -127,9 +127,16 @@ def main():
         print(f'--------- Processing {TICKER}... ---------')
 
         # get account info
-        positions, orders, CASH, EQUITY, PROFIT = setAccountVars()
-        
+        positions, open_orders, CASH, EQUITY, PROFIT = setAccountVars()
+
         own_stock = TICKER in positions
+
+        if len(open_orders) > 0: # cancel orders before proceeding
+            print('Open orders: ')
+            print(open_orders)
+            for order in open_orders:
+                api.cancel_order(order.id)
+                print(f"Cancelled order {order.id} for {order.symbol}")
 
         current_close = getAlpacaQuote(TICKER).ap
 
