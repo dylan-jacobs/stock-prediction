@@ -15,7 +15,7 @@ from backtesting.lib import plot_heatmaps
 
 HISTORY = '60d'
 INTERVAL = '30m' # 1h: max 2y
-TICKER = 'DJD'
+TICKER = 'AAPL'
 
 
 class RSIStrategy(Strategy):
@@ -92,7 +92,7 @@ def calculate_rsi(closes, window_len):
         prev_avg_gain = avg_gain
         prev_avg_loss = avg_loss
         
-        rs = avg_gain / avg_loss
+        rs = avg_gain / (avg_loss + 0.0001) # avoid div by zero
         rsi = (100 - (100 / (1 + rs)))
         
         window.append(close)
