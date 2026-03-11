@@ -3,7 +3,10 @@ name: Run RSI Prediction Script
 on:
   schedule:
     #- cron: '0,30 14-20 * * 1-5'  # IN WINTER FOR DAYLIGHT SAVINGS Every 30 minutes between 9:30 AM and 4:00 PM EST (2:30 PM to 9:00 PM UTC)
-    - cron: '0,30 13-20 * * 1-5'  # IN SUMMER FOR DAYLIGHT SAVINGS 9:30 AM - 4:30 PM ET  
+    # Starts at 9:30 AM ET, runs every 30 min through 4:00 PM ET
+    - cron: '30 13 * * 1-5'        # 9:30 AM ET
+    - cron: '0,30 14-19 * * 1-5'   # 10:00 AM – 3:30 PM ET  
+    - cron: '0 20 * * 1-5'         # 4:00 PM ET  # IN SUMMER FOR DAYLIGHT SAVINGS 9:30 AM - 4:30 PM ET  
   workflow_dispatch: # Allows manual trigger for testing
 
 jobs:
@@ -12,15 +15,15 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: "3.10" # Specify your Python version
 
     - name: Cache Python Dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip # Cache directory for pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
