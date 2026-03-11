@@ -153,12 +153,13 @@ def main():
             print(f'Current price for {TICKER} is ${current_close}, which is above available cash of ${CASH}. Will not execute trade.')
             continue
 
-        if pct_return > bnh_return:
-            print('RSI strategy outperformed Buy & Hold in backtest. Will look to execute trades...')
-            if (rsi < buy_threshold*100) and not own_stock:
+        if (rsi < buy_threshold*100) and not own_stock:
+            if pct_return > bnh_return:
                 buyPosition(TICKER, 1, current_close)
-            elif (rsi >= sell_threshold*100) and own_stock:
-                sellPosition(TICKER, 1, current_close, False)
+            else:
+                print('Strategy did not perform better than buy and hold in backtest... Will not buy')
+        elif (rsi >= sell_threshold*100) and own_stock:
+            sellPosition(TICKER, 1, current_close, False)
 
 
 if __name__=='__main__':
