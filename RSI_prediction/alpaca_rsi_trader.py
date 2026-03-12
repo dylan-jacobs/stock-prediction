@@ -44,10 +44,14 @@ class NewThread(Thread):
         return self._return
 
 def getAlpacaQuote(ticker):
-    try:
-        quote = api.get_latest_quote(ticker)
-    except:
-        quote = None
+    attempts = 2
+    quote = None
+    for i in range(attempts):
+        try:
+            quote = api.get_latest_quote(ticker)
+            break
+        except:
+            quote = None
     return quote
 
 def placeBuyAlpacaOrder(ticker, amnt, price, orders, positions):
@@ -123,6 +127,7 @@ def sellPosition(ticker, qty, price, limit_order):
 def main():    
 
     for TICKER in TICKERS:
+        current_close = -1
 
         print(f'--------- Processing {TICKER}... ---------')
 
