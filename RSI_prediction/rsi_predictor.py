@@ -53,7 +53,7 @@ def calculate_rsi(closes, window_len):
     window = []
     prev_avg_gain = None
     prev_avg_loss = None
-    close_data = [float(i) for i in closes.values]
+    close_data = [float(i) for i in closes.values.flatten()]
     rsi_vals = []
     for i, close in enumerate(close_data):
         gain = 0
