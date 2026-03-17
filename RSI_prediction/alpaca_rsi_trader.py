@@ -156,7 +156,7 @@ def main():
         print(f'Backtest Return: {pct_return}%, Buy & Hold Return: {bnh_return}%')
             
         if (rsi >= sell_threshold*100) and own_stock:
-            sellPosition(TICKER, 1, current_close, False)
+            sellPosition(TICKER)
 
         if current_close is None or current_close == 0:
             print('Error fetching current price. Will not execute trade.')
@@ -171,7 +171,7 @@ def main():
             else:
                 print('Strategy did not perform better than buy and hold in backtest... Will not buy')
         elif (rsi >= sell_threshold*100) and own_stock:
-            sellPosition(TICKER, 1, current_close, False)
+            sellPosition(TICKER)
 
 
 if __name__=='__main__':
