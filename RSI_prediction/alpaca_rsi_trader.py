@@ -109,20 +109,24 @@ def buyPosition(ticker, qty, price):
     if (ticker not in symbols):
         api.cancel_order(ORDER_ID)
         
-def sellPosition(ticker, qty, price, limit_order):
-    # sell now
-    response = placeSellAlpacaOrder(ticker, qty, price, limit_order)
-    positions, orders, CASH, EQUITY, PROFIT = setAccountVars(ticker)
-    
-    # update info
-    symbols = [p.symbol for p in positions]
-    times_repeated = 0
-    while (ticker in symbols) and times_repeated <= 60:
-        symbols = [p.symbol for p in api.list_positions()]
-        print('Attempting to sell...')
-        times_repeated += 1
-        time.sleep(5)
-    return response
+def sellPosition(ticker):
+
+    sold = False
+    attempts = 0
+    while not sold and attempts < 4:
+        try:
+            position = api.get_position(ticker)   # check we own it first
+            api.close_position(ticker)
+            print(f"Closed position: {ticker}")
+            sold = True
+
+        except tradeapi.rest.APIError as e:
+            attempts += 1
+            if '404' in str(e):
+                print(f"No position to close for {ticker}")
+            else:
+                print(f"Error closing {ticker}: {e}")
+            time.sleep(5)
 
 def main():    
 
@@ -151,6 +155,9 @@ def main():
         print(f'{TICKER} - RSI: {rsi}, Current Price: {current_close}, Buy Threshold: {buy_threshold}, Sell Threshold: {sell_threshold}')
         print(f'Backtest Return: {pct_return}%, Buy & Hold Return: {bnh_return}%')
             
+        if (rsi >= sell_threshold*100) and own_stock:
+            sellPosition(TICKER, 1, current_close, False)
+
         if current_close is None or current_close == 0:
             print('Error fetching current price. Will not execute trade.')
             continue
