@@ -149,6 +149,12 @@ def main():
 
         current_close = getAlpacaQuote(TICKER).ap
 
+        attempts = 0
+        while (attempts < 4) and ((current_close == None) or (current_close == 0)):
+            time.sleep(30)
+            current_close = getAlpacaQuote(TICKER).ap
+            attempts += 1
+
         rsi, buy_threshold, sell_threshold, pct_return, bnh_return = rsi_predictor.test_rsi_strategy(TICKER, graph=False, verbose=False)
         rsi = round(rsi, 2)
 
